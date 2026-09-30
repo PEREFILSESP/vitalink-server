@@ -1,0 +1,19 @@
+{
+  "name": "vitalink-server",
+  "version": "1.0.0",
+  "description": "Serveur central VITALINK - API pour l'application patient et le bureau des hopitaux",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/db/seed.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5"
+  }
+}
