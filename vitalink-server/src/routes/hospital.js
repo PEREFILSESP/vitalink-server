@@ -83,11 +83,20 @@ router.put("/results/:id", (req, res) => {
 // ---------- DOSSIERS PATIENTS ----------
 router.get("/patients", (req, res) => {
   const q = (req.query.q || "").toLowerCase();
+  const searchTerm = "%" + q + "%";
   const rows = db.prepare(
-    `SELECT DISTINCT patient_full_name AS fullName, patient_phone AS phone
-     FROM patient_records
-     WHERE hospital_id = ? AND (lower(patient_full_name) LIKE ? OR patient_phone LIKE ?)`
-  ).all(req.hospitalId, `%${q}%`, `%${q}%`);
+    "SELECT DISTINCT full_name AS fullName, phone FROM bookings WHERE hospital_id = ? AND lower(full_name) LIKE ? UNION SELECT DISTINCT patient_full_name AS fullName, patient_phone AS phone FROM patient_records WHERE hospital_id = ? AND lower(patient_full_name) LIKE ?"
+  ).all(req.hospitalId, searchTerm, req.hospitalId, searchTerm);
+  res.json(rows);
+});
+
+router.get("/patients/:name/history", (req, res) => {
+  const rows = db.prepare(
+    `SELECT mode, service_key AS serviceKey, day, slot
+     FROM bookings
+     WHERE hospital_id = ? AND full_name = ?
+     ORDER BY day DESC`
+  ).all(req.hospitalId, req.params.name);
   res.json(rows);
 });
 

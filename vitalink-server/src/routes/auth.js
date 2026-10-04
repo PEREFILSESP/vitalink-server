@@ -1,9 +1,16 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const rateLimit = require("express-rate-limit");
 const db = require("../config/database");
 const { signToken } = require("../config/jwt");
 
 const router = express.Router();
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Trop de tentatives. Reessayez dans 15 minutes." }
+});
 
 // POST /api/auth/register -> creation de compte patient dans un hopital
 router.post("/register", async (req, res) => {
@@ -33,7 +40,7 @@ router.post("/register", async (req, res) => {
 });
 
 // POST /api/auth/login -> connexion patient
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const { hospitalId, contact, password } = req.body;
 
   const patient = db.prepare(
