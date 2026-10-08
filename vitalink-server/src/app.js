@@ -7,6 +7,7 @@ const bookingsRouter = require("./routes/bookings");
 const resultsRouter = require("./routes/results");
 const hospitalAuthRouter = require("./routes/hospitalAuth");
 const hospitalRouter = require("./routes/hospital");
+const adminRouter = require("./routes/admin");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -22,6 +23,7 @@ app.use("/api/bookings", bookingsRouter);
 app.use("/api/results", resultsRouter);
 app.use("/api/hospital-auth", hospitalAuthRouter);
 app.use("/api/hospital", hospitalRouter);
+app.use("/api/admin", adminRouter);
 
 app.use(errorHandler);
 
