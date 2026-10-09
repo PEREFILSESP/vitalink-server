@@ -12,12 +12,51 @@ const loginLimiter = rateLimit({
   message: { error: "Trop de tentatives. Reessayez dans 15 minutes." }
 });
 
+// Verifie que le nom/prenom est raisonnable (lettres, espaces, tirets, apostrophes, 2 a 50 caracteres)
+function isValidName(name) {
+  return typeof name === "string" && /^[A-Za-zÀ-ÿ' -]{2,50}$/.test(name.trim());
+}
+
+// Verifie que la date de naissance est une vraie date, pas dans le futur, et pas plus de 120 ans
+function isValidBirthDate(dateStr) {
+  if (!dateStr) return true; // optionnel
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return false;
+  const now = new Date();
+  const minDate = new Date();
+  minDate.setFullYear(now.getFullYear() - 120);
+  return date <= now && date >= minDate;
+}
+
+// Verifie un numero de telephone beninois (8 chiffres, avec ou sans indicatif +229, avec ou sans le 01)
+function isValidPhone(contact) {
+  if (typeof contact !== "string") return false;
+  const cleaned = contact.replace(/[\s-]/g, "");
+  return /^(\+229)?(01)?\d{8}$/.test(cleaned);
+}
+
 // POST /api/auth/register -> creation de compte patient dans un hopital
 router.post("/register", async (req, res) => {
   const { hospitalId, firstName, lastName, birthDate, gender, contact, password } = req.body;
 
   if (!hospitalId || !firstName || !lastName || !contact || !password) {
     return res.status(400).json({ error: "Champs manquants" });
+  }
+
+  if (!isValidName(firstName) || !isValidName(lastName)) {
+    return res.status(400).json({ error: "Nom ou prenom invalide" });
+  }
+
+  if (!isValidBirthDate(birthDate)) {
+    return res.status(400).json({ error: "Date de naissance invalide" });
+  }
+
+  if (!isValidPhone(contact)) {
+    return res.status(400).json({ error: "Numero de telephone invalide" });
+  }
+
+  if (typeof password !== "string" || password.length < 6) {
+    return res.status(400).json({ error: "Le mot de passe doit contenir au moins 6 caracteres" });
   }
 
   const existing = db.prepare(
