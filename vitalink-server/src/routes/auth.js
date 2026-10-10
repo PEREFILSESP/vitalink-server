@@ -12,6 +12,25 @@ const loginLimiter = rateLimit({
   message: { error: "Trop de tentatives. Reessayez dans 15 minutes." }
 });
 
+const sendCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Trop de demandes de code. Reessayez dans 15 minutes." }
+});
+
+// Configuration Africa's Talking
+const africastalking = require("africastalking")({
+  apiKey: process.env.AFRICASTALKING_API_KEY,
+  username: process.env.AFRICASTALKING_USERNAME || "sandbox"
+});
+const sms = africastalking.SMS;
+
+// Stockage temporaire des codes de verification (en memoire)
+// cle = numero de telephone, valeur = { code, expiresAt }
+const otpStore = new Map();
+
+const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
 // Verifie que le nom/prenom est raisonnable (lettres, espaces, tirets, apostrophes, 2 a 50 caracteres)
 function isValidName(name) {
   return typeof name === "string" && /^[A-Za-zÀ-ÿ' -]{2,50}$/.test(name.trim());
@@ -35,11 +54,46 @@ function isValidPhone(contact) {
   return /^(\+229)?(01)?\d{8}$/.test(cleaned);
 }
 
-// POST /api/auth/register -> creation de compte patient dans un hopital
-router.post("/register", async (req, res) => {
-  const { hospitalId, firstName, lastName, birthDate, gender, contact, password } = req.body;
+// Met le numero au format international +229... pour l'envoi SMS
+function toInternationalFormat(contact) {
+  let cleaned = contact.replace(/[\s-]/g, "");
+  if (cleaned.startsWith("+229")) return cleaned;
+  if (cleaned.startsWith("229")) return "+" + cleaned;
+  return "+229" + cleaned;
+}
 
-  if (!hospitalId || !firstName || !lastName || !contact || !password) {
+function generateOtpCode() {
+  return Math.floor(10000 + Math.random() * 90000).toString(); // 5 chiffres
+}
+
+// POST /api/auth/send-code -> envoie un code de verification par SMS
+router.post("/send-code", sendCodeLimiter, async (req, res) => {
+  const { contact } = req.body;
+
+  if (!isValidPhone(contact)) {
+    return res.status(400).json({ error: "Numero de telephone invalide" });
+  }
+
+  const code = generateOtpCode();
+  otpStore.set(contact, { code, expiresAt: Date.now() + OTP_EXPIRY_MS });
+
+  try {
+    await sms.send({
+      to: [toInternationalFormat(contact)],
+      message: `Votre code de verification VITALINK est : ${code}`
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Erreur envoi SMS:", err.message);
+    res.status(500).json({ error: "Impossible d'envoyer le SMS pour le moment" });
+  }
+});
+
+// POST /api/auth/register -> creation de compte patient dans un hopital (necessite un code verifie)
+router.post("/register", async (req, res) => {
+  const { hospitalId, firstName, lastName, birthDate, gender, contact, password, otpCode } = req.body;
+
+  if (!hospitalId || !firstName || !lastName || !contact || !password || !otpCode) {
     return res.status(400).json({ error: "Champs manquants" });
   }
 
@@ -59,6 +113,11 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ error: "Le mot de passe doit contenir au moins 6 caracteres" });
   }
 
+  const saved = otpStore.get(contact);
+  if (!saved || saved.expiresAt < Date.now() || saved.code !== otpCode) {
+    return res.status(400).json({ error: "Code de verification invalide ou expire" });
+  }
+
   const existing = db.prepare(
     "SELECT id FROM patients WHERE hospital_id = ? AND contact = ?"
   ).get(hospitalId, contact);
@@ -73,6 +132,8 @@ router.post("/register", async (req, res) => {
     `INSERT INTO patients (hospital_id, first_name, last_name, birth_date, gender, contact, password_hash)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(hospitalId, firstName, lastName, birthDate || null, gender || null, contact, passwordHash);
+
+  otpStore.delete(contact);
 
   const token = signToken({ patientId: result.lastInsertRowid, hospitalId });
   res.status(201).json({ token });

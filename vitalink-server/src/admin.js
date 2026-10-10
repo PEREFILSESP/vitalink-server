@@ -40,4 +40,36 @@ router.post("/create-hospital", (req, res) => {
   res.json({ success: true, hospitalId: id, accessCode });
 });
 
+// POST /api/admin/list-hospitals -> liste tous les hopitaux (id, nom, ville, code d'acces)
+router.post("/list-hospitals", (req, res) => {
+  const { adminPassword } = req.body;
+
+  if (adminPassword !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: "Mot de passe admin incorrect" });
+  }
+
+  const hospitals = db.prepare(
+    "SELECT id, name, city, access_code FROM hospitals"
+  ).all();
+
+  res.json({ hospitals });
+});
+
+// POST /api/admin/delete-hospital -> supprime un hopital par son id
+router.post("/delete-hospital", (req, res) => {
+  const { adminPassword, hospitalId } = req.body;
+
+  if (adminPassword !== ADMIN_PASSWORD) {
+    return res.status(403).json({ error: "Mot de passe admin incorrect" });
+  }
+
+  if (!hospitalId) {
+    return res.status(400).json({ error: "hospitalId obligatoire" });
+  }
+
+  db.prepare("DELETE FROM hospitals WHERE id = ?").run(hospitalId);
+
+  res.json({ success: true });
+});
+
 module.exports = router;
